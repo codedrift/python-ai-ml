@@ -22,3 +22,5 @@ pipenv shell
 
 [jupyter notebook tutorial](https://www.dataquest.io/blog/jupyter-notebook-tutorial/)
 
+[statistics yt playlist](https://www.youtube.com/playlist?list=PL0KQuRyPJoe6KjlUM6iNYgt8d0DwI-IGR)
+
