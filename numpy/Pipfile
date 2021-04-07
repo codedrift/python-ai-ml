@@ -10,6 +10,7 @@ rope = "*"
 [packages]
 numpy = "*"
 matplotlib = "*"
+jupyter = "*"
 
 [requires]
 python_version = "3.8"
