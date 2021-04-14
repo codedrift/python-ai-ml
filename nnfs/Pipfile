@@ -11,6 +11,8 @@ rope = "*"
 numpy = "*"
 matplotlib = "*"
 jupyter = "*"
+nnfs = "*"
+agg = "*"
 
 [requires]
 python_version = "3.8"
