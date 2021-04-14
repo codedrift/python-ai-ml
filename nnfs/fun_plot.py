@@ -30,10 +30,11 @@ ax = plt.axes()
 # base graph
 ax.plot(x, f(x))
 
-for i in range(1, SIZE - 2):
-    new_y = m[i] * x - (m[i])
-    ax.plot(x +i, new_y)
-    print(i, x[i:i +2], new_y[i:i + 2])
-    ax.plot(x[i:i +2], new_y[i:i + 2], 'bo')
+for i in range(SIZE - 3):
+    new_y = m[i] * x - m[i]
+    better_y = new_y - (new_y[i] - y[i])
+    ax.plot(x, better_y)
+    print(i, x[i:i +2], better_y[i:i + 2], y[i:i + 2])
+    ax.plot(x[i:i +2], better_y[i:i + 2], 'bo')
 
 plt.show()
