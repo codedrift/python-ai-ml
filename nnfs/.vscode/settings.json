@@ -1,3 +1,4 @@
 {
-    "jupyter.jupyterServerType": "local"
+    "jupyter.jupyterServerType": "local",
+    "python.pythonPath": "/home/codedrift/.local/share/virtualenvs/nnfs-5Ro0U46w/bin/python"
 }
