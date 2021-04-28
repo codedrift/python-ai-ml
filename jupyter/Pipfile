@@ -4,10 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-prophet = "*"
-pandas = "*"
-numpy = "*"
-matplotlib = "*"
+jupyter = "*"
 
 [dev-packages]
 
