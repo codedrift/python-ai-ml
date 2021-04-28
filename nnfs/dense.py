@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
-
 import numpy as np
+
 import nnfs
+
 # optional: use spiral data nnfs package
 # from nnfs.datasets import spiral_data
 
@@ -13,24 +14,30 @@ nnfs.init()
 # np.random.seed(0)
 
 # https://github.com/Sentdex/nnfs/blob/master/nnfs/datasets/spiral.py
+
+
 def spiral_data(samples, classes):
     X = np.zeros((samples*classes, 2))
     y = np.zeros(samples*classes, dtype='uint8')
     for class_number in range(classes):
         ix = range(samples*class_number, samples*(class_number+1))
         r = np.linspace(0.0, 1, samples)  # radius
-        t = np.linspace(class_number*4, (class_number+1)*4, samples) + np.random.randn(samples)*0.2
+        t = np.linspace(class_number*4, (class_number+1)*4,
+                        samples) + np.random.randn(samples)*0.2
         X[ix] = np.c_[r*np.sin(t*2.5), r*np.cos(t*2.5)]
         y[ix] = class_number
     return X, y
 
 # https://github.com/Sentdex/nnfs/blob/master/nnfs/datasets/vertical.py
+
+
 def vertical_data(samples, classes):
     X = np.zeros((samples*classes, 2))
     y = np.zeros(samples*classes, dtype='uint8')
     for class_number in range(classes):
         ix = range(samples*class_number, samples*(class_number+1))
-        X[ix] = np.c_[np.random.randn(samples)*.1 + (class_number)/3, np.random.randn(samples)*.1 + 0.5]
+        X[ix] = np.c_[np.random.randn(
+            samples)*.1 + (class_number)/3, np.random.randn(samples)*.1 + 0.5]
         y[ix] = class_number
     return X, y
 
@@ -43,9 +50,19 @@ class Layer_Dense:
     def forward(self, inputs):
         self.output = np.dot(inputs, self.weights) + self.biases
 
+    def backward(self, dvalues):
+        self.dweights = np.dot(self.inputs.T, dvalues)
+        self.dbiases = np.sum(dvalues, axis=0, keepdims=True)
+        self.dinputs = np.dot(dvalues, self.weights.T)
+
+
 class Activation_ReLU:
     def forward(self, inputs):
         self.output = np.maximum(0, inputs)
+
+    def backward(self, dvalues):
+        self.dinputs = dvalues.copy()
+        self.dinputs[self.dinputs <= 0] = 0
 
 
 class Activation_Softmax:
@@ -54,6 +71,16 @@ class Activation_Softmax:
         probabilities = exp_values / np.sum(exp_values, axis=1, keepdims=True)
         self.output = probabilities
 
+    def backward(self,dvalues):
+        self.dinputs = np.empty_like(dvalues)
+
+        for index, (single_output, single_dvalues) in enumerate(zip(self.output, dvalues)):
+            single_output = single_output.reshape(-1,1)
+            jacobian_matrix = np.diagflat(single_output) - np.dot(single_output, single_output.T)
+
+            self.dinputs[index] = np.dot(jacobian_matrix, single_dvalues)
+
+
 
 class Loss:
     def calculate(self, output, y):
@@ -61,12 +88,12 @@ class Loss:
         data_loss = np.mean(sample_losses)
         return data_loss
 
+
 class Loss_CategoricalCrossEntropy(Loss):
     def forward(self, y_pred, y_true):
         # number of samples in abatch
         samples = len(y_pred)
         y_pred_clipped = np.clip(y_pred, 1e-7, 1 - 1e-7)
-
 
         if len(y_true.shape) == 1:
             correct_confidences = y_pred_clipped[
@@ -78,9 +105,20 @@ class Loss_CategoricalCrossEntropy(Loss):
                 y_pred_clipped*y_true,
                 axis=1
             )
-        
+
         negative_log_likelihoods = -np.log(correct_confidences)
         return negative_log_likelihoods
+
+    def backward(self,dvalues,y_true):
+        samples = len(dvalues)
+        labels = len(dvalues[0])
+
+        if len(y_true.shape) == 1:
+            y_true = np.eye(labels)[y_true]
+
+        self.dinputs = -y_true / dvalues
+        self.dinputs = self.dinputs / samples
+
 
 
 
@@ -99,11 +137,7 @@ class Loss_CategoricalCrossEntropy(Loss):
 # print(layer2.output)
 
 
-
-
-
-
-X,y = spiral_data(samples=100, classes=3)
+X, y = spiral_data(samples=100, classes=3)
 
 # print("spiral data shape",X.shape, y.shape)
 
@@ -146,9 +180,9 @@ X,y = spiral_data(samples=100, classes=3)
 
 # X, y = vertical_data(samples=100, classes=3)
 
-dense1 = Layer_Dense(2,3)
+dense1 = Layer_Dense(2, 3)
 activation1 = Activation_ReLU()
-dense2 = Layer_Dense(3,3)
+dense2 = Layer_Dense(3, 3)
 activation2 = Activation_Softmax()
 
 loss_fuction = Loss_CategoricalCrossEntropy()
@@ -162,10 +196,10 @@ best_dense2_biases = dense2.biases.copy()
 
 for iteration in range(100000):
 
-    dense1.weights += 0.05 * np.random.randn(2,3)
-    dense1.biases += 0.05 * np.random.randn(1,3)
-    dense2.weights += 0.05 * np.random.randn(3,3)
-    dense2.biases += 0.05 * np.random.randn(1,3)
+    dense1.weights += 0.05 * np.random.randn(2, 3)
+    dense1.biases += 0.05 * np.random.randn(1, 3)
+    dense2.weights += 0.05 * np.random.randn(3, 3)
+    dense2.biases += 0.05 * np.random.randn(1, 3)
 
     dense1.forward(X)
     activation1.forward(dense1.output)
@@ -178,7 +212,8 @@ for iteration in range(100000):
     accuracy = np.mean(predictions == y)
 
     if loss < lowest_loss:
-        print("New set of weights found, itration: ", iteration, "loss:", loss, "acc: ",accuracy)
+        print("New set of weights found, itration: ",
+              iteration, "loss:", loss, "acc: ", accuracy)
         best_dense1_weights = dense1.weights.copy()
         best_dense1_biases = dense1.biases.copy()
         best_dense2_weights = dense2.weights.copy()
