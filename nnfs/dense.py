@@ -2,13 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import nnfs
-
 # optional: use spiral data nnfs package
-# from nnfs.datasets import spiral_data
+from nnfs.datasets import spiral_data
 
 # this sets some variables like random seeds to be consistent on different machines
 # https://github.com/Sentdex/nnfs/blob/master/nnfs/core.py
-nnfs.init()
+# nnfs.init()
 
 # set numpy random seed manually
 # np.random.seed(0)
@@ -59,11 +58,12 @@ class Layer_Dense:
 
 class Activation_ReLU:
     def forward(self, inputs):
+        self.inputs = inputs
         self.output = np.maximum(0, inputs)
 
     def backward(self, dvalues):
         self.dinputs = dvalues.copy()
-        self.dinputs[self.dinputs <= 0] = 0
+        self.dinputs[self.inputs <= 0] = 0
 
 
 class Activation_Softmax:
@@ -154,16 +154,77 @@ class Loss_CategoricalCrossEntropy(Loss):
 
 class Optimizer_SGD:
 
-    def __init__(self, learning_rate=1.0):
+    def __init__(self, learning_rate=1., decay=0., momentum=0.):
         self.learning_rate = learning_rate
+        self.current_learning_rate = learning_rate
+        self.decay = decay
+        self.iterations = 0
+        self.momentum = momentum
+
+    def pre_update_params(self):
+        if self.decay:
+            self.current_learning_rate = self.learning_rate * \
+                (1. / (1. + self.decay * self.iterations))
 
     def update_params(self, layer):
-        layer.weights += -self.learning_rate * layer.dweights
-        layer.biases += -self.learning_rate * layer.dbiases
+        if self.momentum:
+            if not hasattr(layer, "weight_momentums"):
+                layer.weight_momentums = np.zeros_like(layer.weights)
+                layer.bias_momentums = np.zeros_like(layer.biases)
+
+            weight_updates = self.momentum * layer.weight_momentums - \
+                self.current_learning_rate * layer.dweights
+            layer.weight_momentums = weight_updates
+
+            bias_updates = \
+                self.momentum * layer.bias_momentums - \
+                self.current_learning_rate * layer.dbiases
+            layer.bias_momentums = bias_updates
+
+        else:
+            weight_updates = -self.current_learning_rate * layer.dweights
+            bias_updates = -self.current_learning_rate * layer.dbiases
+
+        layer.weights += weight_updates
+        layer.biases += bias_updates
+
+    def post_update_params(self):
+        self.iterations += 1
 
 
+class Optimizer_Adagrad:
 
-# generate some data in a spiral with three classes
+    def __init__(self, learning_rate=1., decay=0., epsilon=1e-7):
+        self.learning_rate = learning_rate
+        self.current_learning_rate = learning_rate
+        self.decay = decay
+        self.iterations = 0
+        self.epsilon = epsilon
+
+    def pre_update_params(self):
+        if self.decay:
+            self.current_learning_rate = self.learning_rate * \
+                (1. / (1. + self.decay * self.iterations))
+
+    def update_params(self, layer: Layer_Dense):
+        if not hasattr(layer, "weight_cache"):
+            layer.weight_cache = np.zeros_like(layer.weights)
+            layer.bias_cache = np.zeros_like(layer.biases)
+
+        layer.weight_cache += layer.dweights**2
+        layer.bias_cache += layer.dbiases**2
+
+        layer.weights += -self.current_learning_rate * \
+            layer.dweights / (np.sqrt(layer.weight_cache) + self.epsilon)
+
+        layer.biases += -self.current_learning_rate * \
+            layer.dbiases / (np.sqrt(layer.bias_cache) + self.epsilon)
+
+    def post_update_params(self):
+        self.iterations += 1
+
+
+        # generate some data in a spiral with three classes
 X, y = spiral_data(samples=100, classes=3)
 
 dense1 = Layer_Dense(2, 64)
@@ -172,7 +233,8 @@ dense2 = Layer_Dense(64, 3)
 
 loss_activation = Activation_Softmax_Loss_CategoricalCrossentropy()
 
-optimizer = Optimizer_SGD(learning_rate=1)
+# optimizer = Optimizer_SGD(learning_rate=1, decay=1e-3, momentum=0.9)
+optimizer = Optimizer_Adagrad(decay=1e-4)
 
 for epoch in range(10001):
     # first layer
@@ -197,7 +259,8 @@ for epoch in range(10001):
     accuracy = np.mean(predictions == y)
 
     if not epoch % 100:
-        print(f"epoch: {epoch}", f" acc: {accuracy:.3f}", f"loss: {loss:.3f}")
+        print(
+            f"epoch: {epoch} acc: {accuracy:.3f} loss: {loss:.3f} lr: {optimizer.current_learning_rate}")
 
     # BACKWARD PASS
     loss_activation.backward(loss_activation.output, y)
@@ -205,5 +268,7 @@ for epoch in range(10001):
     activation1.backward(dense2.dinputs)
     dense1.backward(activation1.dinputs)
 
+    optimizer.pre_update_params()
     optimizer.update_params(dense1)
     optimizer.update_params(dense2)
+    optimizer.post_update_params()
