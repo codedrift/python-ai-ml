@@ -1,7 +1,7 @@
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 
-import nnfs
+# import nnfs
 # optional: use spiral data nnfs package
 from nnfs.datasets import spiral_data
 
@@ -16,35 +16,54 @@ from nnfs.datasets import spiral_data
 
 
 def spiral_data(samples, classes):
-    X = np.zeros((samples*classes, 2))
-    y = np.zeros(samples*classes, dtype='uint8')
+    print(f"Generating spriral data samples: {samples}, classes: {classes}")
+    X = np.zeros((samples * classes, 2))
+    y = np.zeros(samples * classes, dtype="uint8")
     for class_number in range(classes):
-        ix = range(samples*class_number, samples*(class_number+1))
+        ix = range(samples * class_number, samples * (class_number + 1))
         r = np.linspace(0.0, 1, samples)  # radius
-        t = np.linspace(class_number*4, (class_number+1)*4,
-                        samples) + np.random.randn(samples)*0.2
-        X[ix] = np.c_[r*np.sin(t*2.5), r*np.cos(t*2.5)]
+        t = (
+            np.linspace(class_number * 4, (class_number + 1) * 4, samples)
+            + np.random.randn(samples) * 0.2
+        )
+        X[ix] = np.c_[r * np.sin(t * 2.5), r * np.cos(t * 2.5)]
         y[ix] = class_number
     return X, y
+
 
 # https://github.com/Sentdex/nnfs/blob/master/nnfs/datasets/vertical.py
 
 
 def vertical_data(samples, classes):
-    X = np.zeros((samples*classes, 2))
-    y = np.zeros(samples*classes, dtype='uint8')
+    X = np.zeros((samples * classes, 2))
+    y = np.zeros(samples * classes, dtype="uint8")
     for class_number in range(classes):
-        ix = range(samples*class_number, samples*(class_number+1))
-        X[ix] = np.c_[np.random.randn(
-            samples)*.1 + (class_number)/3, np.random.randn(samples)*.1 + 0.5]
+        ix = range(samples * class_number, samples * (class_number + 1))
+        X[ix] = np.c_[
+            np.random.randn(samples) * 0.1 + (class_number) / 3,
+            np.random.randn(samples) * 0.1 + 0.5,
+        ]
         y[ix] = class_number
     return X, y
 
 
 class Layer_Dense:
-    def __init__(self, n_inputs, n_neurons):
+    def __init__(
+        self,
+        n_inputs,
+        n_neurons,
+        weight_regularizer_l1=0,
+        weight_regularizer_l2=0,
+        bias_regularizer_l1=0,
+        bias_regularizer_l2=0,
+    ):
         self.weights = 0.01 * np.random.randn(n_inputs, n_neurons)
         self.biases = np.zeros((1, n_neurons))
+        # regularization
+        self.weight_regularizer_l1 = weight_regularizer_l1
+        self.weight_regularizer_l2 = weight_regularizer_l2
+        self.bias_regularizer_l2 = bias_regularizer_l2
+        self.bias_regularizer_l1 = bias_regularizer_l1
 
     def forward(self, inputs):
         self.inputs = inputs
@@ -78,12 +97,15 @@ class Activation_Softmax:
         # create uninitialized array for resulting gradients
         self.dinputs = np.empty_like(dvalues)
         # enumerate outputs and gradients
-        for index, (single_output, single_dvalues) in enumerate(zip(self.output, dvalues)):
+        for index, (single_output, single_dvalues) in enumerate(
+            zip(self.output, dvalues)
+        ):
             # flatten array
             single_output = single_output.reshape(-1, 1)
             # calculate jacobian matrix of the output
-            jacobian_matrix = np.diagflat(
-                single_output) - np.dot(single_output, single_output.T)
+            jacobian_matrix = np.diagflat(single_output) - np.dot(
+                single_output, single_output.T
+            )
 
             self.dinputs[index] = np.dot(jacobian_matrix, single_dvalues)
 
@@ -91,7 +113,6 @@ class Activation_Softmax:
 # we calc the derivate of categorical crossentropy  with respect to the activation
 # function to save on computation
 class Activation_Softmax_Loss_CategoricalCrossentropy:
-
     def __init__(self):
         self.activation = Activation_Softmax()
         self.loss = Loss_CategoricalCrossEntropy()
@@ -128,15 +149,9 @@ class Loss_CategoricalCrossEntropy(Loss):
         y_pred_clipped = np.clip(y_pred, 1e-7, 1 - 1e-7)
 
         if len(y_true.shape) == 1:
-            correct_confidences = y_pred_clipped[
-                range(samples),
-                y_true
-            ]
+            correct_confidences = y_pred_clipped[range(samples), y_true]
         elif len(y_true.shape) == 2:
-            correct_confidences = np.sum(
-                y_pred_clipped*y_true,
-                axis=1
-            )
+            correct_confidences = np.sum(y_pred_clipped * y_true, axis=1)
 
         negative_log_likelihoods = -np.log(correct_confidences)
         return negative_log_likelihoods
@@ -151,10 +166,38 @@ class Loss_CategoricalCrossEntropy(Loss):
         self.dinputs = -y_true / dvalues
         self.dinputs = self.dinputs / samples
 
+    def regularization_loss(self, layer: Layer_Dense):
+        regularization_loss = 0
+
+        # l1 reg weights
+        if layer.weight_regularizer_l1 > 0:
+            regularization_loss += layer.weight_regularizer_l1 * np.sum(
+                np.abs(layer.weights)
+            )
+
+        # l2 reg weights
+        if layer.weight_regularizer_l2 > 0:
+            regularization_loss += layer.weight_regularizer_l2 * np.sum(
+                layer.weights * layer.weights
+            )
+
+        # l1 reg bias
+        if layer.bias_regularizer_l1 > 0:
+            regularization_loss += layer.bias_regularizer_l1 * np.sum(
+                np.abs(layer.biases)
+            )
+
+        # l2 reg biases
+        if layer.bias_regularizer_l2 > 0:
+            regularization_loss += layer.bias_regularizer_l2 * np.sum(
+                layer.biases * layer.biases
+            )
+
+        return regularization_loss
+
 
 class Optimizer_SGD:
-
-    def __init__(self, learning_rate=1., decay=0., momentum=0.):
+    def __init__(self, learning_rate=1.0, decay=0.0, momentum=0.0):
         self.learning_rate = learning_rate
         self.current_learning_rate = learning_rate
         self.decay = decay
@@ -163,8 +206,9 @@ class Optimizer_SGD:
 
     def pre_update_params(self):
         if self.decay:
-            self.current_learning_rate = self.learning_rate * \
-                (1. / (1. + self.decay * self.iterations))
+            self.current_learning_rate = self.learning_rate * (
+                1.0 / (1.0 + self.decay * self.iterations)
+            )
 
     def update_params(self, layer):
         if self.momentum:
@@ -172,13 +216,16 @@ class Optimizer_SGD:
                 layer.weight_momentums = np.zeros_like(layer.weights)
                 layer.bias_momentums = np.zeros_like(layer.biases)
 
-            weight_updates = self.momentum * layer.weight_momentums - \
-                self.current_learning_rate * layer.dweights
+            weight_updates = (
+                self.momentum * layer.weight_momentums
+                - self.current_learning_rate * layer.dweights
+            )
             layer.weight_momentums = weight_updates
 
-            bias_updates = \
-                self.momentum * layer.bias_momentums - \
-                self.current_learning_rate * layer.dbiases
+            bias_updates = (
+                self.momentum * layer.bias_momentums
+                - self.current_learning_rate * layer.dbiases
+            )
             layer.bias_momentums = bias_updates
 
         else:
@@ -193,8 +240,7 @@ class Optimizer_SGD:
 
 
 class Optimizer_Adagrad:
-
-    def __init__(self, learning_rate=1., decay=0., epsilon=1e-7):
+    def __init__(self, learning_rate=1.0, decay=0.0, epsilon=1e-7):
         self.learning_rate = learning_rate
         self.current_learning_rate = learning_rate
         self.decay = decay
@@ -203,30 +249,36 @@ class Optimizer_Adagrad:
 
     def pre_update_params(self):
         if self.decay:
-            self.current_learning_rate = self.learning_rate * \
-                (1. / (1. + self.decay * self.iterations))
+            self.current_learning_rate = self.learning_rate * (
+                1.0 / (1.0 + self.decay * self.iterations)
+            )
 
     def update_params(self, layer: Layer_Dense):
         if not hasattr(layer, "weight_cache"):
             layer.weight_cache = np.zeros_like(layer.weights)
             layer.bias_cache = np.zeros_like(layer.biases)
 
-        layer.weight_cache += layer.dweights**2
-        layer.bias_cache += layer.dbiases**2
+        layer.weight_cache += layer.dweights ** 2
+        layer.bias_cache += layer.dbiases ** 2
 
-        layer.weights += -self.current_learning_rate * \
-            layer.dweights / (np.sqrt(layer.weight_cache) + self.epsilon)
+        layer.weights += (
+            -self.current_learning_rate
+            * layer.dweights
+            / (np.sqrt(layer.weight_cache) + self.epsilon)
+        )
 
-        layer.biases += -self.current_learning_rate * \
-            layer.dbiases / (np.sqrt(layer.bias_cache) + self.epsilon)
+        layer.biases += (
+            -self.current_learning_rate
+            * layer.dbiases
+            / (np.sqrt(layer.bias_cache) + self.epsilon)
+        )
 
     def post_update_params(self):
         self.iterations += 1
 
 
 class Optimizer_RMSProp:
-
-    def __init__(self, learning_rate=0.001, decay=0., epsilon=1e-7, rho=0.9):
+    def __init__(self, learning_rate=0.001, decay=0.0, epsilon=1e-7, rho=0.9):
         self.learning_rate = learning_rate
         self.current_learning_rate = learning_rate
         self.decay = decay
@@ -236,32 +288,42 @@ class Optimizer_RMSProp:
 
     def pre_update_params(self):
         if self.decay:
-            self.current_learning_rate = self.learning_rate * \
-                (1. / (1. + self.decay * self.iterations))
+            self.current_learning_rate = self.learning_rate * (
+                1.0 / (1.0 + self.decay * self.iterations)
+            )
 
     def update_params(self, layer):
         if not hasattr(layer, "weight_cache"):
             layer.weight_cache = np.zeros_like(layer.weights)
             layer.bias_cache = np.zeros_like(layer.biases)
 
-        layer.weight_cache = self.rho * layer.weight_cache + \
-            (1 - self.rho) * layer.dweights**2
-        layer.bias_cache = self.rho * layer.bias_cache + \
-            (1 - self.rho) * layer.dbiases**2
+        layer.weight_cache = (
+            self.rho * layer.weight_cache + (1 - self.rho) * layer.dweights ** 2
+        )
+        layer.bias_cache = (
+            self.rho * layer.bias_cache + (1 - self.rho) * layer.dbiases ** 2
+        )
 
-        layer.weights += -self.current_learning_rate * \
-            layer.dweights / (np.sqrt(layer.weight_cache) + self.epsilon)
+        layer.weights += (
+            -self.current_learning_rate
+            * layer.dweights
+            / (np.sqrt(layer.weight_cache) + self.epsilon)
+        )
 
-        layer.biases += -self.current_learning_rate * \
-            layer.dbiases / (np.sqrt(layer.bias_cache) + self.epsilon)
+        layer.biases += (
+            -self.current_learning_rate
+            * layer.dbiases
+            / (np.sqrt(layer.bias_cache) + self.epsilon)
+        )
 
     def post_update_params(self):
         self.iterations += 1
 
 
 class Optimizer_Adam:
-
-    def __init__(self, learning_rate=0.001, decay=0., epsilon=1e-7, beta_1=0.9, beta_2=0.999):
+    def __init__(
+        self, learning_rate=0.001, decay=0.0, epsilon=1e-7, beta_1=0.9, beta_2=0.999
+    ):
         self.learning_rate = learning_rate
         self.current_learning_rate = learning_rate
         self.decay = decay
@@ -272,8 +334,9 @@ class Optimizer_Adam:
 
     def pre_update_params(self):
         if self.decay:
-            self.current_learning_rate = self.learning_rate * \
-                (1. / (1. + self.decay * self.iterations))
+            self.current_learning_rate = self.learning_rate * (
+                1.0 / (1.0 + self.decay * self.iterations)
+            )
 
     def update_params(self, layer):
 
@@ -283,35 +346,49 @@ class Optimizer_Adam:
             layer.bias_momentums = np.zeros_like(layer.biases)
             layer.bias_cache = np.zeros_like(layer.biases)
 
-        layer.weight_momentums = self.beta_1 * \
-            layer.weight_momentums + (1 - self.beta_1) * layer.dweights
+        layer.weight_momentums = (
+            self.beta_1 * layer.weight_momentums + (1 - self.beta_1) * layer.dweights
+        )
 
-        layer.bias_momentums = self.beta_1 * \
-            layer.bias_momentums + (1 - self.beta_1) * layer.dbiases
+        layer.bias_momentums = (
+            self.beta_1 * layer.bias_momentums + (1 - self.beta_1) * layer.dbiases
+        )
 
-        weight_momentums_corrected = layer.weight_momentums / \
-            (1 - self.beta_1 ** (self.iterations + 1))
+        weight_momentums_corrected = layer.weight_momentums / (
+            1 - self.beta_1 ** (self.iterations + 1)
+        )
 
-        bias_momentums_corrected = layer.bias_momentums / \
-            (1 - self.beta_1 ** (self.iterations + 1))
+        bias_momentums_corrected = layer.bias_momentums / (
+            1 - self.beta_1 ** (self.iterations + 1)
+        )
 
-        layer.weight_cache = self.beta_2 * layer.weight_cache + \
-            (1 - self.beta_2) * layer.dweights**2
+        layer.weight_cache = (
+            self.beta_2 * layer.weight_cache + (1 - self.beta_2) * layer.dweights ** 2
+        )
 
-        layer.bias_cache = self.beta_2 * layer.bias_cache + \
-            (1 - self.beta_2) * layer.dbiases**2
+        layer.bias_cache = (
+            self.beta_2 * layer.bias_cache + (1 - self.beta_2) * layer.dbiases ** 2
+        )
 
-        weight_cache_corrected = layer.weight_cache / \
-            (1 - self.beta_2 ** (self.iterations + 1))
+        weight_cache_corrected = layer.weight_cache / (
+            1 - self.beta_2 ** (self.iterations + 1)
+        )
 
-        bias_cache_corrected = layer.bias_cache / \
-            (1 - self.beta_2 ** (self.iterations + 1))
+        bias_cache_corrected = layer.bias_cache / (
+            1 - self.beta_2 ** (self.iterations + 1)
+        )
 
-        layer.weights += -self.current_learning_rate * weight_momentums_corrected / \
-            (np.sqrt(weight_cache_corrected) + self.epsilon)
+        layer.weights += (
+            -self.current_learning_rate
+            * weight_momentums_corrected
+            / (np.sqrt(weight_cache_corrected) + self.epsilon)
+        )
 
-        layer.biases += -self.current_learning_rate * bias_cache_corrected / \
-            (np.sqrt(bias_cache_corrected) + self.epsilon)
+        layer.biases += (
+            -self.current_learning_rate
+            * bias_momentums_corrected
+            / (np.sqrt(bias_cache_corrected) + self.epsilon)
+        )
 
     def post_update_params(self):
         self.iterations += 1
@@ -346,6 +423,9 @@ for epoch in range(10001):
     # second the loss is calculated with the optimized derivate
     loss = loss_activation.forward(dense2.output, y)
 
+    regularization_loss = loss_activation.reg
+
+
     predictions = np.argmax(loss_activation.output, axis=1)
 
     if len(y.shape) == 2:
@@ -355,7 +435,8 @@ for epoch in range(10001):
 
     if not epoch % 100:
         print(
-            f"epoch: {epoch} acc: {accuracy:.3f} loss: {loss:.3f} lr: {optimizer.current_learning_rate}")
+            f"epoch: {epoch} acc: {accuracy:.3f} loss: {loss:.3f} lr: {optimizer.current_learning_rate}"
+        )
 
     # BACKWARD PASS
     loss_activation.backward(loss_activation.output, y)
@@ -367,3 +448,19 @@ for epoch in range(10001):
     optimizer.update_params(dense1)
     optimizer.update_params(dense2)
     optimizer.post_update_params()
+
+X_test, y_test = spiral_data(samples=100, classes=3)
+
+dense1.forward(X_test)
+activation1.forward(dense1.output)
+dense2.forward(activation1.output)
+
+loss = loss_activation.forward(dense2.output, y_test)
+
+predictions = np.argmax(loss_activation.output, axis=1)
+
+if len(y_test.shape) == 2:
+    y_test = np.argmax(y_test, axis=1)
+accuracy = np.mean(predictions == y_test)
+
+print(f"Validation, acc: {accuracy:.3f}, loss: {loss:.3f}")
