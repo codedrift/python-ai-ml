@@ -1,5 +1,7 @@
 # PYTHON AI ML
 
+Random assortment of AI/ML/DS playgrounds
+
 ## VENV setup
 
 ```bash
