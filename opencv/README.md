@@ -1,0 +1,1 @@
+Find groups of elements in image
