@@ -9,6 +9,10 @@ jupyter = "*"
 scikit-learn = "*"
 pandas = "*"
 numpy = "*"
+holoviews = "*"
+hvplot = "*"
+nltk = "*"
+xgboost = "*"
 
 [dev-packages]
 

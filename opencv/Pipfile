@@ -14,8 +14,10 @@ opencv-python = "*"
 matplotlib = "*"
 imutils = "*"
 opencv-contrib-python = "*"
+scipy = "*"
 
 [dev-packages]
+black = "*"
 
 [requires]
 python_version = "3.9"
