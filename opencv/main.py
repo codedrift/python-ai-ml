@@ -1,3 +1,4 @@
+import datetime
 import os
 from math import sqrt
 from random import randrange
@@ -220,6 +221,8 @@ def get_bounded_groups(input_image, show_steps):
 
     cv2.imshow(f'Result {input_image}', img)
 
+    return groups
+
 
 # this is the key component. it defines the maximum distance
 MAX_OBJECT_DISTANCE = 12
@@ -242,7 +245,11 @@ images = [f'input/{i}' for i in filelist]
 # only handle jpg
 for image in filter(lambda i: i.endswith(".jpg"), images):
     print(f'Process {image}')
+    a = datetime.datetime.now()
     get_bounded_groups(image, False)
+    b = datetime.datetime.now()
+    c = b - a
+    print("Finding groups took",c.microseconds / 1000, "ms")
 
 cv2.waitKey(0)
 # closing all open windows
