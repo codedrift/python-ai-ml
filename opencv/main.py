@@ -1,3 +1,4 @@
+import os
 from math import sqrt
 from random import randrange
 
@@ -81,7 +82,18 @@ def is_near(current, target, used, max_distance):
     # find smallest distance
     min_distance = min(distances.flatten())
 
-    print(f"Current: {current_name} rect={current_rect} area={current_area}")
+
+    # This is hacky but seems to work. check if contour is within the other
+    if cx > tx and cy > ty:
+        if cx < tx + tw and cy < ty + th:
+            return True
+
+    # inverse condition
+    if tx > cx and ty > cy:
+        if tx < cx + cw and ty < cy + ch:
+            return True
+
+    # print(f"Current: {current_name} rect={current_rect} area={current_area}")
     print(f"{target_name} ==> {current_name} min_distance: {min_distance}")
 
     if min_distance < max_distance:
@@ -100,21 +112,14 @@ def find_neighbors(rects, targets, used):
         target_rect = target["xywh"]
         target_area = target["area"]
 
-        # if target_name in used:
-        #     print(f"Target {target_name} is already used {used} ")
-        #     continue
-
         print("Target", target_name, target_rect, target_area)
 
         for current in rects:
 
-            is_neighbor = is_near(current, target, used, 5)
+            is_neighbor = is_near(current, target, used, 10)
 
             if is_neighbor:
                 neighbors.append(current)
-
-    if len(neighbors) > 0:
-        neighbors.append(target)
 
     return neighbors
 
@@ -126,6 +131,13 @@ def group_neighbors(rects):
     for rect in rects:
         done = False
         neighbors = [rect]
+
+        name = rect["name"]
+
+        if name in used:
+            print(f"Target {name} is already used {used} ")
+            continue
+
         print(f'Find neighbors for {rect["name"]}, used={used}')
         while not done:
             # neighbors including self
@@ -134,107 +146,85 @@ def group_neighbors(rects):
             if len(curr_neighbors) == 0:
                 print(f'Rect {neighbors[0]["name"]} has no neigbors')
                 done = True
-                # completed.append(neighbors)
-                # used.extend([n["name"] for n in neighbors])
             else:
                 neighbors.extend(curr_neighbors)
                 # save used refs to prevent multiple uses
                 used.extend([n["name"] for n in curr_neighbors])
 
-        # if len(neighbors) > 1:
-        used.extend([n["name"] for n in neighbors])
         print(f'{rect["name"]} >> Grouped {[n["name"] for n in neighbors]}\n')
         completed.append(neighbors)
-        # else:
-        # print(f'{rect["name"]} >> No group\n')
-
-        # return completed
 
     return completed
 
 
-input_image = "logo.png"
+
 
 # load image and resize
-print(f"Loading image {input_image}")
-base_image = cv2.imread(input_image)
-resized = imutils.resize(base_image, width=300)
-ratio = base_image.shape[0] / float(resized.shape[0])
-print(f"Image has ratio {ratio}")
-cv2.imshow("Original image", resized)
+def get_bounded_groups(input_image, show_steps):
+    print(f"Loading image {input_image}")
+    base_image = cv2.imread(input_image)
+    resized = imutils.resize(base_image, width=300)
+    ratio = base_image.shape[0] / float(resized.shape[0])
+    print(f"Image has ratio {ratio}")
+    cv2.imshow(f'Original {input_image}', resized)
 
-# remove colors
-gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-cv2.imshow("Grayscale image", gray)
+    # remove colors
+    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+    if show_steps:
+        cv2.imshow(f'Grayscale {input_image}', gray)
 
-# blur image
-blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-cv2.imshow("Blurred image", blurred)
+    # blur image
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    if show_steps:
+        cv2.imshow(f'Blurred {input_image}', blurred)
 
-# apply threshold to image to ignore fades etc
-# see https://learnopencv.com/opencv-threshold-python-cpp/
-threshold = 80
-maxValue = 128
-thresh = cv2.threshold(blurred, threshold, maxValue, cv2.THRESH_BINARY)[1]
-cv2.imshow("Threshold image", thresh)
+    # apply threshold to image to ignore fades etc
+    # see https://learnopencv.com/opencv-threshold-python-cpp/
+    # threshold = 127
+    # maxValue = 0
+    # thresh = cv2.threshold(blurred, threshold, maxValue, cv2.THRESH_BINARY)[1]
+    # cv2.imshow("Threshold image", thresh)
 
-# detect edges
-edged = cv2.Canny(thresh, 30, 200)
-cv2.imshow("Edged image", edged)
+    # detect edges
+    edged = cv2.Canny(blurred, 30, 200)
+    if show_steps:
+        cv2.imshow(f'Edged {input_image}', edged)
 
-# find all contours
-all_contours, hierarchy = cv2.findContours(
-    edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
-)
+    # find all contours
+    all_contours, hierarchy = cv2.findContours(
+        edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+    )
 
-single_contours = resized.copy()
+    if show_steps:
+        drawContours(f'All contours {input_image}', all_contours, resized.copy())
 
-drawContours("All countours", all_contours, resized.copy())
+    # sort contours by size
+    sorted_contours = sorted(all_contours, key=cv2.contourArea, reverse=True)
 
-# sort contours by size
-sorted_contours = sorted(all_contours, key=cv2.contourArea, reverse=True)
+    # enhance found contours with bounding rects and stuff
+    rects = map_to_bounding_rects(sorted_contours)
 
+    print(f'Found rects {[n["name"] for n in rects]}\n')
 
-# enhance found contours with bounding rects and stuff
-rects = map_to_bounding_rects(sorted_contours)
+    groups = group_neighbors(rects)
 
-groups = group_neighbors(rects)
+    print(f"Found {len(groups)} groups")
 
-print(f"Found {len(groups)} groups")
+    img = resized.copy()
 
-img = resized.copy()
+    for idx, group in enumerate(groups):
+        combined_contours = np.vstack([n["contour"] for n in group])
+        x, y, w, h = cv2.boundingRect(combined_contours)
+        cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
 
-for idx, group in enumerate(groups):
-    combined_contours = np.vstack([n["contour"] for n in group])
-    x, y, w, h = cv2.boundingRect(combined_contours)
-    cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 2)
-    # drawContours(f'Group {idx}', combined_contours, img)
+    cv2.imshow(f'Result {input_image}', img)
 
-cv2.imshow("final_result image", img)
+filelist=os.listdir('input')
+images = [f'input/{i}' for i in filelist]
 
-# first_rect = rects[0]
-# combine contours to a larger one
-# neighbors = find_neighbors(rects, first_rect , [])
-
-# print("neighbors", neighbors)
-
-# close_contours = [n["contour"] for n in neighbors]
-# close_rects = [n["name"] for n in neighbors]
-# print(f'Close rects for {first_rect["name"]} {close_rects}')
-# drawContours("close contours", close_contours, resized.copy())
-
-# unified_contours = np.vstack(close_contours)
-
-# get bounding rect for combined contours
-# x, y, w, h = cv2.boundingRect(unified_contours)
-# unified_contours_img = resized.copy()
-# cv2.rectangle(unified_contours_img, (x, y), (x + w, y + h), (0, 0, 255), 2)
-# cv2.imshow("union_contours rect", unified_contours_img)
-
-# cv2.imshow('grouped_contours rect',grouped_contours)
-# cv2.drawContours(final_result,contours,-1,(0,255,0),3)
-# cv2.imshow('final_result image',final_result)
-
+for image in images:
+    print(f'Process {image}')
+    get_bounded_groups(image, False)
 
 cv2.waitKey(0)
 # closing all open windows
