@@ -15,6 +15,7 @@ matplotlib = "*"
 imutils = "*"
 opencv-contrib-python = "*"
 scipy = "*"
+pillow = "*"
 
 [dev-packages]
 black = "*"

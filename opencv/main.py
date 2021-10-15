@@ -5,6 +5,7 @@ from random import randrange
 import cv2
 import imutils
 import numpy as np
+from PIL import Image
 from scipy.spatial.distance import cdist
 
 
@@ -77,7 +78,7 @@ def is_near(current, target, used, max_distance):
     ]
 
     # calculates all distances between points
-    distances = cdist(target_points, current_points, metric="cityblock")
+    distances = cdist(target_points, current_points, metric="euclidean")
 
     # find smallest distance
     min_distance = min(distances.flatten())
@@ -116,7 +117,7 @@ def find_neighbors(rects, targets, used):
 
         for current in rects:
 
-            is_neighbor = is_near(current, target, used, 10)
+            is_neighbor = is_near(current, target, used, MAX_OBJECT_DISTANCE)
 
             if is_neighbor:
                 neighbors.append(current)
@@ -169,7 +170,7 @@ def get_bounded_groups(input_image, show_steps):
     cv2.imshow(f'Original {input_image}', resized)
 
     # remove colors
-    gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(resized, cv2.COLOR_BGRA2GRAY)
     if show_steps:
         cv2.imshow(f'Grayscale {input_image}', gray)
 
@@ -219,10 +220,27 @@ def get_bounded_groups(input_image, show_steps):
 
     cv2.imshow(f'Result {input_image}', img)
 
+
+# this is the key component. it defines the maximum distance
+MAX_OBJECT_DISTANCE = 12
+
+filelist=os.listdir('input')
+images = [f'input/{i}' for i in filelist]
+# convert all png to jpg with gray bg
+for image in images:
+    if image.endswith(".png"):
+        im = Image.open(image).convert("RGBA")
+        new_image = Image.new("RGBA", im.size, "#e0e0e0")
+        new_image.paste(im, mask=im)   
+        rgb_im = new_image.convert('RGB')
+        rgb_im.save(image.replace(".png",".jpg"))
+
+
 filelist=os.listdir('input')
 images = [f'input/{i}' for i in filelist]
 
-for image in images:
+# only handle jpg
+for image in filter(lambda i: i.endswith(".jpg"), images):
     print(f'Process {image}')
     get_bounded_groups(image, False)
 
